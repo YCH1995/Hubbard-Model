@@ -1,0 +1,128 @@
+import numpy as np
+from math import *
+from numpy.linalg import eig
+from scipy.sparse.linalg import eigsh
+from scipy.sparse import *
+from itertools import combinations
+from numba import jit
+ 
+#The function below calculate (2n)!/(n!)(n!).
+def combination(n):                  
+    temp=int(factorial(2*n)/int(factorial(n))**2)
+    return temp                            
+    
+def make_base(n,state): 
+#This function return the base ket of n,n+1,n-1 electrons on 2n sites.
+#Coressponding to state=0,1,-1.The essence of the function is "combinations"
+#Combinations(a,b)means randomly choose b items from list a.
+    base=np.arange(int(2*n))               
+    index=0
+    if(state==0):
+        elec_num=n
+        length=combination(n)
+    elif(state==1):
+        elec_num=n+1
+        length=int(combination(n)*n/(n+1))
+    elif(state==-1):
+        elec_num=n-1
+        length=int(combination(n)*n/(n+1))
+    else:
+        print("Error")
+    trans=[0]*length
+    for i in combinations(base,elec_num):
+        result=0
+        for elem in i:
+            result += 1<<elem            
+        trans[index]=result/1
+        index=index+1   
+    trans.sort()
+    return trans
+    
+def locat(i,array):  
+#Using dichotomy to find the location of i in list array.If i is not in array,
+#return Error.
+    high = len(array) - 1
+    low = 0
+    if i > array[high] or i < array[0]:
+        raise InputError('The item does not in the collection!')
+    elif i == array[0]:
+        return 0
+    elif i == array[high]:
+        return high
+    else:
+        while (high - low) > 1:
+            mid = int((low + high) / 2)
+            if i == array[mid]:
+                return mid
+            elif i < array[mid]:
+                high = mid
+            elif i > array[mid]:
+                low =mid
+        raise InputError('The item does not in the collection!')
+        
+def num(n,i,j):
+#Return the number of "1"s between the ith and jth items in list n.
+    count=0
+    if(i>=j):
+        raise InputError('i is bigger than j')
+    if((j-i)==1):
+        return 0
+    for pos in range(i+1,j):
+        if(np.bitwise_and(n,1<<pos)==1<<pos):
+            count=count+1            
+    return count
+
+def hopping_matrix(i,j,array,n):
+#i,j Means two different sites.This function returns the hopping term.
+    a=[]
+    for k in range(n):
+        a.append(int(array[k]))
+    buff0=np.bitwise_and(a,1<<i)==0
+    buff1=np.bitwise_and(a,1<<j)==1<<j
+    buff=np.logical_and(buff0,buff1)  
+    column=np.where(buff==True)[0]
+    len1=len(column)
+    init=[0]*len1
+    final=[0]*len1
+    diff=(1<<i)-(1<<j)
+    for count in range(len1):
+        init[count]=a[column[count]]
+        final[count]=init[count]+diff
+    count=0
+    row=[0]*len1
+    eff=[0]*len1
+    for sta in final:
+        row[count]=locat(sta,a)
+        eff[count]=(-1)**(num(sta,i,j))
+        count=count+1
+    mtx = csr_matrix((eff, (row, column)), shape=(n,n))
+    mtx=mtx+csr_matrix((eff, (column, row)), shape=(n,n))
+    return mtx
+ 
+def interpart(array,dim,U,n):
+#This function returns the interaction term.
+    a=[]
+    for k in range(dim):
+        a.append(int(array[k]))
+    mtx=0
+    for j in range(n):
+        i=2*j
+        k=2*j+1
+        buff0=np.bitwise_and(a,1<<i)==1<<i
+        buff1=np.bitwise_and(a,1<<k)==1<<k
+        buff=np.logical_and(buff0,buff1)
+        column=np.where(buff==True)[0]
+        len1=len(column)
+        eff=[U]*len1
+        mtx=mtx+csr_matrix((eff,(column,column)),shape=(dim,dim))
+    return mtx 
+    
+def make_matrix(a,U,dim,num):
+#Return the matrix representation of Hubbard Hamilton.
+#Notice,state =0,1,-1 apply to the same algorithm.You only need to choose the dim.
+    mtx=interpart(a,dim,U,num)
+    for i in range(2*num-2):
+        for j in range(i+1,2*num):
+            if(i%2==j%2):
+                mtx=mtx+hopping_matrix(i,j,a,dim)
+    return mtx
