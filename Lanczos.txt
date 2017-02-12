@@ -1,0 +1,24 @@
+#The most complex part is, sometimes the iteration will converge itself before reaching the iter_time.
+#In such case,"c1" will equal to 0 in theory, but computer will not be so accurate, it will return a rather small and random number.
+#Thus, the outcome will be random.
+def Lanczos(array,mtx,iter_time):
+    a=[]
+    b=[]
+    c1=sqrt(np.vdot(array,array))
+    v1=array/c1
+    w1=mtx.dot(v1)
+    c0=np.vdot(w1,v1)
+    a.append(c0)
+    w2=w1-c0*v1
+    for i in range(iter_time-1):
+        c1=sqrt(np.vdot(w2,w2))
+        if(c1<1e-6):
+            break
+        b.append(c1)
+        v0=v1
+        v1=w2/c1
+        w1=mtx.dot(v1)
+        c0=np.vdot(w1,v1)
+        a.append(c0)
+        w2=w1-c0*v1-c1*v0
+    return(a,b)
