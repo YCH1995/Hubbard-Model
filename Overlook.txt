@@ -1,5 +1,5 @@
 n=2#Number of electrons
-a1=make_base(n,0)#Half-filled base,Used to construct H Matrix.
+a1=make_base(n,0)#Half-filled base,Used to construct Hubbard Matrix.
 a2=make_base(n,1)
 a3=make_base(n,-1)
 dim=combination(n)#Dimension of Matrix
@@ -7,19 +7,19 @@ dim2=int(dim*n/(n+1))
 H1=make_matrix(a1,0,dim,n)#Hubbard Matrix
 temp=np.random.random(dim)
 i=Lanczos_time(temp,H1,1E-8)#Use Lanczos Iteration.(Stop when converged)
-a,b=Lanczos_ground_state(temp,H1,i)#A returns ground energy,b returns ket.
+a,b=Lanczos_ground_state(temp,H1,i)#A returns ground energy,b returns ground state ket.
 H2=make_matrix(a2,0,dim2,n)
 H3=make_matrix(a3,0,dim2,n)
 
 #Picture
 pointnum=100#Size of picture is pnum*pnum
 x=np.linspace(-4,4,pointnum)#Range for x
-s=np.zeros([pointnum,pointnum])
+s=np.zeros([pointnum,pointnum])#Aim function space
 k0=3.141592653589793
 k=np.linspace(0,k0,pointnum)#Range for k
 for count in range(pointnum):
     for count2 in range(pointnum):
-        z=x[count]+0.03j#0.03j just represents a small imaginary part.
+        z=x[count]+0.03j#0.03j is just an example as a small imaginary part.
         G=Green_mtx_standard(z,n,H2,H3,a,b)#Lehmmann Rep for Green function
         s[count][count2]=Periodization(G,n,k[count2])#Periodization
 
