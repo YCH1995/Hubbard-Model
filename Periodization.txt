@@ -1,0 +1,16 @@
+def Periodization(G,n,k):
+#This part is actually the essential part in cluster perturbation theory.
+#V describes the interaction between different clusters.
+    V=np.zeros((n,n),dtype=complex)
+    t = n * k
+    V[0][n-1]=complex(cos(t),(-1)*sin(t))
+    V[n-1][0]=complex(cos(t),sin(t))
+    GreenRPA=np.linalg.inv(G)-V
+    GreenRPA=np.linalg.inv(GreenRPA)
+    GreenCPT=0
+    for a in range(n):
+        for b in range(n): 
+            t=(b-a)*k
+            GreenCPT=GreenCPT+complex(cos(t),sin(t))*GreenRPA[a][b]
+    GreenCPT=GreenCPT/n
+    return GreenCPT.imag*(-2)
