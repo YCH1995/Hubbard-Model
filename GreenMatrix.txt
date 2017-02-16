@@ -1,0 +1,63 @@
+#Calculate Green function by definition(Directly multiple by matrix).Not the Lanczos method.
+#Keynote:The G matrix's size can be 2n*2n,n means the number of electrons in half-filled state.
+#However,however, we only need n*n for further calculation.Thus, we confine that only those state
+#with up spin should be considered.
+
+def Green_mtx_standard(z,n,U,ground_energy,ground_ket):
+    a1=make_base(n,0)
+    a2=make_base(n,1)
+    a3=make_base(n,-1)
+    dim=int(combination(n)*n/(n+1))
+    H_inc=make_matrix(a2,U,dim,n).toarray()
+    H_dec=make_matrix(a3,U,dim,n).toarray()
+    G=np.zeros((n,n),dtype=complex)
+
+    for i in range(n):
+        for j in range(n):
+            f1=H_tra(n,1,2*i).dot(ground_ket)#ca+(2*i means only consider up spin state.)
+            f2=H_tra(n,1,2*j).dot(ground_ket)#cb+
+            temp=[z+ground_energy]*dim
+            H0=np.diag(temp,0)-H_inc#z+E-H
+            Hi=np.linalg.inv(H0)#1/(z+E-H)            
+            g=np.vdot(f1,Hi.dot(f2))
+            
+            f1=H_tra(n,-1,2*j).dot(ground_ket)#cb-
+            f2=H_tra(n,-1,2*i).dot(ground_ket)#ca-
+            temp=[z-ground_energy]*dim
+            H0=np.diag(temp,0)+H_dec#z-E+H
+            Hi=np.linalg.inv(H0)#1/(z-E+H)
+            g=g+np.vdot(f1,Hi.dot(f2))
+            G[i][j]=g
+    return G
+    
+def H_tra(n,state,l):
+#a1 is the origin one,a2 is added or subtracted one electron from a1.(Depends on the state.)
+#This function is used to transfer two bases."l"means the location where transferation occurs.
+#Which can also consider as the matrix representation of annhilation OP or
+#production OP.Necessary when calculating the green function with Lanczos.
+    a1=make_base(n,0)
+    a2=make_base(n,state)
+    if(state==1):
+        buff=np.bitwise_and(a1,1<<l)==0
+        diff=1<<l
+    elif(state==-1):
+        buff=np.bitwise_and(a1,1<<l)==1<<l
+        diff=0-1<<l
+    column=np.where(buff==True)[0]
+    lenl=len(column)
+    init=[0]*lenl
+    final=[0]*lenl
+    for count in range(lenl):
+        init[count]=a1[column[count]]
+        final[count]=init[count]+diff
+    count=0
+    row=[0]*lenl
+    eff=[0]*lenl
+    for sta in final:
+        row[count]=locat(sta,a2)
+        eff[count]=(-1)**(num(sta,l,2*n))
+        count=count+1
+    dim=combination(n)
+    dim2=int(dim*n/(n+1))
+    mtx = csr_matrix((eff, (row, column)), shape=(dim2,dim))
+    return mtx        
