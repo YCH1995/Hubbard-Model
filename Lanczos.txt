@@ -23,7 +23,8 @@ def Lanczos(array,mtx,iter_time):
         w2=w1-c0*v1-c1*v0
     return(a,b)
 
-#Also, perhaps
+#Also, sometimes the useful information is not only a,b, but the kets produced in iteration 
+#And the triangular matrix constructed by a,b.
 def Lanczos_store(array,mtx,iter_time):
     a=[]
     b=[]
@@ -49,3 +50,12 @@ def Lanczos_store(array,mtx,iter_time):
         w2=w1-c0*v1-c1*v0
     H_tri=np.diag(a,0)+np.diag(b,1)+np.diag(b,-1)
     return(ket_store,H_tri,i)
+
+#Use Lanczos to return ground energy and ground state ket.
+def Lanczos_ground_state(array,mtx,iter_time):
+    ket_store,H_tri,i=Lanczos_store(array,mtx,iter_time)
+    a,b=eigsh(H_tri,2,which='SA',tol=1E-4)
+    ground_ket=0
+    for count in range(i+1):
+        ground_ket=ground_ket+b[count][0]*ket_store[count]        
+    return (a[0],ground_ket)
