@@ -61,3 +61,46 @@ def H_tra(n,state,l):
     dim2=int(dim*n/(n+1))
     mtx = csr_matrix((eff, (row, column)), shape=(dim2,dim))
     return mtx        
+
+#Calculate the Green function with Lanczos method.This is a rather raw one.
+#I have to say that outcome created by Lanczos is not so accurate.
+#P.S Many part of this computing is not necesaary.Means it needs polishment.(Wait and see)
+def Green_mtx_Lanczos(z,n,U,ground_energy,ground_ket):
+    G=np.zeros((n,n),dtype=complex)
+    a2=make_base(n,1)
+    a3=make_base(n,-1)
+    d=int(combination(n)*n/(n+1))
+    H2=make_matrix(a2,U,d,n)
+    H3=make_matrix(a3,U,d,n)
+    for i in range(n):
+        for j in range(n):
+            left=[]
+            f1=H_tra(n,1,2*i).dot(ground_ket)
+            f2=H_tra(n,1,2*j).dot(ground_ket)
+            f1=normal(f1)
+            f2=normal(f2)
+            s,H,time=Lanczos_store(f2,H2,250)
+            for k in range(time):
+                left.append(np.vdot(f1,s[k]))
+            temp=[z+ground_energy]*time
+            H0=np.diag(temp,0)-H
+            e=[0]*(time)
+            e[0]=1
+            x=np.linalg.inv(H0).dot(e)
+            g=np.vdot(left,x)
+            left=[]
+            f1=H_tra(n,-1,2*j).dot(ground_ket)
+            f2=H_tra(n,-1,2*i).dot(ground_ket)
+            f1=normal(f1)
+            f2=normal(f2)
+            s,H,time=Lanczos_store(f2,H3,250)
+            for k in range(time):
+                left.append(np.vdot(f1,s[k]))
+            temp=[z-ground_energy]*time
+            H0=np.diag(temp,0)+H
+            e=[0]*time
+            e[0]=1
+            x=np.linalg.inv(H0).dot(e)
+            g=g+np.vdot(left,x)
+            G[i][j]=g
+    return G
