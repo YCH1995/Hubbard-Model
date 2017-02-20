@@ -126,3 +126,15 @@ def make_matrix(a,U,dim,num):
             if(i%2==j%2):
                 mtx=mtx+hopping_matrix(i,j,a,dim)
     return mtx
+
+def make_matrix_near(a,U,dim,num):
+#This is the correct one!!!
+#No perioidization.Confined to the nearest.
+    mtx=interpart(a,dim,U,num)
+    for i in range(2*num-2):
+        j=i+2
+        mtx=mtx+hopping_matrix(i,j,a,dim)
+#    if(num>=4):
+#        mtx=mtx+hopping_matrix(0,2*num-2,a,dim)
+#        mtx=mtx+hopping_matrix(1,2*num-1,a,dim)
+    return mtx
