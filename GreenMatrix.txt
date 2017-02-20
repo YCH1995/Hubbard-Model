@@ -114,7 +114,7 @@ def Green_mtx_Lanczos_new(z,n,complete1,complete2,
         for j in range(n):
             f1=s1[i]
             f2=s1[j]
-            store=complete1[i]
+            store=complete1[j]
             H=Htri1[j]
             left=[]
             for k in range(t):#######t not complied yet
