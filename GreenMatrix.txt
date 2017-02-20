@@ -104,3 +104,40 @@ def Green_mtx_Lanczos(z,n,U,ground_energy,ground_ket):
             g=g+np.vdot(left,x)
             G[i][j]=g
     return G
+    
+#Delete much repeated calculation.Final Version
+def Green_mtx_Lanczos_new(z,n,complete1,complete2,
+                          Htri1,Htri2,ground_energy,ground_ket):
+                        
+    G=np.zeros((n,n),dtype=complex)
+    for i in range(n):
+        for j in range(n):
+            f1=s1[i]
+            f2=s1[j]
+            store=complete1[i]
+            H=Htri1[j]
+            left=[]
+            for k in range(t):#######t not complied yet
+                left.append(np.vdot(f1,store[k]))
+            temp=[z+ground_energy]*t
+            H0=np.diag(temp,0)-H
+            e=[0]*(t)
+            e[0]=1
+            x=np.linalg.inv(H0).dot(e)
+            g=np.vdot(left,x)
+            
+            f1=s2[j]
+            f2=s2[i]
+            store=complete2[i]
+            H=Htri2[i]
+            left=[]
+            for k in range(t):
+                left.append(np.vdot(f1,store[k]))
+            temp=[z-ground_energy]*t
+            H0=np.diag(temp,0)+H
+            e=[0]*t
+            e[0]=1
+            x=np.linalg.inv(H0).dot(e)
+            g=g+np.vdot(left,x)
+            G[i][j]=g
+    return G
