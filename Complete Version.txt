@@ -1,0 +1,436 @@
+import numpy as np
+from math import *
+from numpy.linalg import eig
+from scipy.sparse.linalg import eigsh
+from scipy.sparse import *
+from itertools import combinations
+from numba import jit
+import matplotlib.pyplot as plt
+ 
+#The function below calculate (2n)!/(n!)(n!).
+def combination(n):                  
+    temp=int(factorial(2*n)/int(factorial(n))**2)
+    return temp                            
+    
+def make_base(n,state): 
+#This function return the base ket of n,n+1,n-1 electrons on 2n sites.
+#Coressponding to state=0,1,-1.The essence of the function is "combinations"
+#Combinations(a,b)means randomly choose b items from list a.
+    base=np.arange(int(2*n))               
+    index=0
+    if(state==0):
+        elec_num=n
+        length=combination(n)
+    elif(state==1):
+        elec_num=n+1
+        length=int(combination(n)*n/(n+1))
+    elif(state==-1):
+        elec_num=n-1
+        length=int(combination(n)*n/(n+1))
+    else:
+        print("Error")
+    trans=[0]*length
+    for i in combinations(base,elec_num):
+        result=0
+        for elem in i:
+            result += 1<<elem            
+        trans[index]=int(result)
+        index=index+1   
+    trans.sort()
+    return trans
+    
+def locat(i,array):  
+#Using dichotomy to find the location of i in list array.If i is not in array,
+#return Error.
+    high = len(array) - 1
+    low = 0
+    if i > array[high] or i < array[0]:
+        raise InputError('The item does not in the collection!')
+    elif i == array[0]:
+        return 0
+    elif i == array[high]:
+        return high
+    else:
+        while (high - low) > 1:
+            mid = int((low + high) / 2)
+            if i == array[mid]:
+                return mid
+            elif i < array[mid]:
+                high = mid
+            elif i > array[mid]:
+                low =mid
+        raise InputError('The item does not in the collection!')
+        
+def num(n,i,j):
+#Return the number of "1"s between the ith and jth items in list n.
+    count=0
+    if(i>=j):
+        raise InputError('i is bigger than j')
+    if((j-i)==1):
+        return 0
+    for pos in range(i+1,j):
+        if(np.bitwise_and(n,1<<pos)==1<<pos):
+            count=count+1            
+    return count
+
+def hopping_matrix(i,j,array,n):
+#i,j Means two different sites.This function returns the hopping term.
+    a=[]
+    for k in range(n):
+        a.append(int(array[k]))
+    buff0=np.bitwise_and(a,1<<i)==0
+    buff1=np.bitwise_and(a,1<<j)==1<<j
+    buff=np.logical_and(buff0,buff1)  
+    column=np.where(buff==True)[0]
+    len1=len(column)
+    init=[0]*len1
+    final=[0]*len1
+    diff=(1<<i)-(1<<j)
+    for count in range(len1):
+        init[count]=a[column[count]]
+        final[count]=init[count]+diff
+    count=0
+    row=[0]*len1
+    eff=[0]*len1
+    for sta in final:
+        row[count]=locat(sta,a)
+        eff[count]=(-1)**(num(sta,i,j))
+        count=count+1
+    mtx = csr_matrix((eff, (row, column)), shape=(n,n))
+    mtx=mtx+csr_matrix((eff, (column, row)), shape=(n,n))
+    return mtx
+ 
+def interpart(array,dim,U,n):
+#This function returns the interaction term.
+    a=[]
+    for k in range(dim):
+        a.append(int(array[k]))
+    mtx=0
+    for j in range(n):
+        i=2*j
+        k=2*j+1
+        buff0=np.bitwise_and(a,1<<i)==1<<i
+        buff1=np.bitwise_and(a,1<<k)==1<<k
+        buff=np.logical_and(buff0,buff1)
+        column=np.where(buff==True)[0]
+        len1=len(column)
+        eff=[U]*len1
+        mtx=mtx+csr_matrix((eff,(column,column)),shape=(dim,dim))
+    return mtx 
+    
+def make_matrix(a,U,dim,num):
+#Return the matrix representation of Hubbard Hamilton.
+#Notice,state =0,1,-1 apply to the same algorithm.You only need to choose the dim.
+    mtx=interpart(a,dim,U,num)
+    for i in range(2*num-2):
+        for j in range(i+1,2*num):
+            if(i%2==j%2):
+                mtx=mtx+hopping_matrix(i,j,a,dim)
+    return mtx
+
+def make_matrix_near(a,U,dim,num):
+#Return the matrix representation of Hubbard Hamilton.
+#Notice,state =0,1,-1 apply to the same algorithm.You only need to choose the dim.
+    mtx=interpart(a,dim,U,num)
+    for i in range(2*num-2):
+        j=i+2
+        mtx=mtx+hopping_matrix(i,j,a,dim)
+#    if(num>=4):
+#        mtx=mtx+hopping_matrix(0,2*num-2,a,dim)
+#        mtx=mtx+hopping_matrix(1,2*num-1,a,dim)
+    return mtx
+    
+def Lanczos(array,mtx,iter_time):
+    a=[]
+    b=[]
+    c1=sqrt(np.vdot(array,array))
+    v1=array/c1
+    w1=mtx.dot(v1)
+    c0=np.vdot(w1,v1)
+    a.append(c0)
+    w2=w1-c0*v1
+    for i in range(iter_time-1):
+        c1=sqrt(np.vdot(w2,w2))
+        if(c1<1e-6):
+            break
+        b.append(c1)
+        v0=v1
+        v1=w2/c1
+        w1=mtx.dot(v1)
+        c0=np.vdot(w1,v1)
+        a.append(c0)
+        w2=w1-c0*v1-c1*v0
+    return(a,b)
+
+def Lanczos_store(array,mtx,iter_time):
+    a=[]
+    b=[]
+    ket_store=[]
+    c1=sqrt(np.vdot(array,array))
+    v1=array/c1
+    ket_store.append(v1)
+    w1=mtx.dot(v1)
+    c0=np.vdot(w1,v1)
+    a.append(c0)
+    w2=w1-c0*v1
+    for i in range(iter_time-1):
+        c1=sqrt(np.vdot(w2,w2))
+        if(c1<1e-6):
+            break
+        v0=v1
+        v1=w2/c1
+        ket_store.append(v1)
+        w1=mtx.dot(v1)
+        c0=np.vdot(w1,v1)
+        b.append(c1)
+        a.append(c0)
+        w2=w1-c0*v1-c1*v0
+    H_tri=np.diag(a,0)+np.diag(b,1)+np.diag(b,-1)
+    return(ket_store,H_tri,i+1)
+    
+def Lanczos_mtx(array,mtx,iter_time):
+    a,b=Lanczos(array,mtx,iter_time)
+    H_tri=np.diag(a,0)+np.diag(b,1)+np.diag(b,-1)
+    return H_tri
+ 
+def Lanczos_time(array,mtx,precision):
+    i=9
+    H=Lanczos_mtx(array,mtx,i)
+    a,b=eigsh(H,2,which='SA',tol=1E-4)
+    t0=a[0]
+    for i in range(10,200):
+        H=Lanczos_mtx(array,mtx,i)
+        a,b=eigsh(H,2,which='SA',tol=1E-4)
+        if(abs(t0-a[0])<precision):
+            break
+        t0=a[0]
+    return i
+    
+def Lanczos_ground_state(array,mtx,iter_time):
+    ket_store,H_tri,i=Lanczos_store(array,mtx,iter_time)
+    a,b=eigsh(H_tri,2,which='SA',tol=1E-4)
+    ground_ket=0
+    for count in range(i):
+        ground_ket=ground_ket+b[count][0]*ket_store[count]        
+    return (a[0],ground_ket)
+    
+def H_tra(n,state,l):
+#a1 is the origin one,a2 is added or subtracted one electron from a1.
+#This function is used to transfer two bases.
+#Which can also consider as the matrix representation of annhilation OP or
+#produce OP.Necessary when calculating the green function with Lanczos.
+    a1=make_base(n,0)
+    a2=make_base(n,state)
+    if(state==1):
+        buff=np.bitwise_and(a1,1<<l)==0
+        diff=1<<l
+    elif(state==-1):
+        buff=np.bitwise_and(a1,1<<l)==1<<l
+        diff=0-1<<l
+    column=np.where(buff==True)[0]
+    lenl=len(column)
+    init=[0]*lenl
+    final=[0]*lenl
+    for count in range(lenl):
+        init[count]=a1[column[count]]
+        final[count]=init[count]+diff
+    count=0
+    row=[0]*lenl
+    eff=[0]*lenl
+    for sta in final:
+        row[count]=locat(sta,a2)
+        eff[count]=(-1)**(num(sta,l,2*n))
+        count=count+1
+    dim=combination(n)
+    dim2=int(dim*n/(n+1))
+    mtx = csr_matrix((eff, (row, column)), shape=(dim2,dim))
+    return mtx        
+    
+def normal(array):                           #归一化
+    mold=sqrt(np.vdot(array,array))
+    return array/mold
+    
+def set_of_ket(n,state,ket):
+    s=[]
+    for i in range(n):
+        H=H_tra(n,state,2*i)
+        f=H.dot(ket)
+#        f=normal(f)
+        s.append(f)
+    return s
+
+def Set_of_Lanczos(s,H,n,iter_time):
+#OMG
+    set_of_complete_set=[]
+    set_of_Htri=[]
+    for i in range(n):
+        f=s[i]
+        store,Htri,time=Lanczos_store(f,H,iter_time)
+        set_of_complete_set.append(store)
+        set_of_Htri.append(Htri)
+    return (set_of_complete_set,set_of_Htri)    
+    
+def Green_mtx_standard(z,n,s1,s2,H1,H2,ground_energy,ground_ket):
+    dim=int(combination(n)*n/(n+1))
+    G=np.zeros((n,n),dtype=complex)
+    for i in range(n):
+        for j in range(n):
+            f1=s1[i]#ca+
+            f2=s1[j]#cb+
+#            f1=normal(f1)
+#            f2=normal(f2)
+            temp=[z+ground_energy]*dim
+            H0=np.diag(temp,0)-H1#z+E-H
+            Hi=np.linalg.inv(H0)#1/(z+E-H)  
+            g=np.vdot(f1,Hi.dot(f2))
+            
+            f1=s2[j]#cb-
+            f2=s2[i]#ca-
+#            f1=normal(f1)
+#            f2=normal(f2)
+            temp=[z-ground_energy]*dim
+            H0=np.diag(temp,0)+H2#z-E+H
+            Hi=np.linalg.inv(H0)#1/(z-E+H)
+            g=g+np.vdot(f1,Hi.dot(f2))
+            G[i][j]=g
+    return G
+ 
+def Green_mtx_Lanczos(z,n,U,ground_energy,ground_ket):
+    G=np.zeros((n,n),dtype=complex)
+    a2=make_base(n,1)
+    a3=make_base(n,-1)
+    d=int(combination(n)*n/(n+1))
+    H2=make_matrix(a2,U,d,n)
+    H3=make_matrix(a3,U,d,n)
+    for i in range(n):
+        for j in range(n):
+            left=[]
+            f1=H_tra(n,1,2*i).dot(ground_ket)
+            f2=H_tra(n,1,2*j).dot(ground_ket)
+#            f1=normal(f1)
+#            f2=normal(f2)
+            s,H,time=Lanczos_store(f2,H2,250)
+            for k in range(time):
+                left.append(np.vdot(f1,s[k]))
+            temp=[z+ground_energy]*time
+            H0=np.diag(temp,0)-H
+            e=[0]*(time)
+            e[0]=1
+            x=np.linalg.inv(H0).dot(e)
+            g=np.vdot(left,x)
+            left=[]
+            f1=H_tra(n,-1,2*j).dot(ground_ket)
+            f2=H_tra(n,-1,2*i).dot(ground_ket)
+#            f1=normal(f1)
+#            f2=normal(f2)
+            s,H,time=Lanczos_store(f2,H3,250)
+            for k in range(time):
+                left.append(np.vdot(f1,s[k]))
+            temp=[z-ground_energy]*time
+            H0=np.diag(temp,0)+H
+            e=[0]*time
+            e[0]=1
+            x=np.linalg.inv(H0).dot(e)
+            g=g+np.vdot(left,x)
+            G[i][j]=g
+    return G
+
+def Green_mtx_Lanczos_new(z,n,complete1,complete2,
+                          Htri1,Htri2,ground_energy,ground_ket):
+    G=np.zeros((n,n),dtype=complex)
+    for i in range(n):
+        for j in range(n):
+            store=complete1[i]
+            H=Htri1[j]
+            left=[]
+            for k in range(t):#######t not complied yet
+                left.append(np.vdot(f1,store[k]))
+            temp=[z+ground_energy]*t
+            H0=np.diag(temp,0)-H
+            e=[0]*(t)
+            e[0]=1
+            x=np.linalg.inv(H0).dot(e)
+            g=np.vdot(left,x)
+            
+            store=complete2[j]
+            H=Htri2[i]
+            left=[]
+            for k in range(t):
+                left.append(np.vdot(f1,store[k]))
+            temp=[z-ground_energy]*t
+            H0=np.diag(temp,0)+H
+            e=[0]*time_d
+            e[0]=1
+            x=np.linalg.inv(H0).dot(e)
+            g=g+np.vdot(left,x)
+            G[i][j]=g
+    return G
+        
+def Periodization(G,n,k):
+#This part is actually the most important part in cluster perturbation theory.
+#V describes the interaction between different clusters.
+    V=np.zeros((n,n),dtype=complex)
+    t = n * k
+    V[0][n-1]=complex(cos(t),(-1)*sin(t))
+    V[n-1][0]=complex(cos(t),sin(t))
+#    print(G)
+    GreenRPA=np.linalg.inv(G)-V
+    GreenRPA=np.linalg.inv(GreenRPA)
+    GreenCPT=0
+    for a in range(n):
+        for b in range(n): 
+            t=(b-a)*k
+            GreenCPT=GreenCPT+complex(cos(t),sin(t))*GreenRPA[a][b]
+    GreenCPT=GreenCPT/n
+    return GreenCPT.imag*(-2)    
+  
+def Periodization_Lanczos(G,n,k):
+#Why this is wrong?
+    V=np.zeros((n,n),dtype=complex)
+    t = n * k
+    V[0][n-1]=complex(cos(t),(-1)*sin(t))
+    V[n-1][0]=complex(cos(t),sin(t))
+#    print(G)
+    GreenRPA=G+G.dot(V.dot(G))
+    GreenCPT=0
+    for a in range(n):
+        for b in range(n): 
+            t=(b-a)*k
+            GreenCPT=GreenCPT+complex(cos(t),sin(t))*GreenRPA[a][b]
+    GreenCPT=GreenCPT/n
+    return GreenCPT.imag*(-2)
+    
+n=4#Number of electrons
+U=4#U/t,the relavent strength of interaction
+a1=make_base(n,0)#Half-filled base,Used to construct H Matrix.
+a2=make_base(n,1)
+a3=make_base(n,-1)
+dim=combination(n)#Dimension of Matrix
+dim2=int(dim*n/(n+1))
+H1=make_matrix_near(a1,U,dim,n)#Hubbard Matrix
+H2=make_matrix_near(a2,U,dim2,n).toarray()
+H3=make_matrix_near(a3,U,dim2,n).toarray()
+temp=np.random.random(dim)#Random array
+i=Lanczos_time(temp,H1,1E-8)#Use Lanczos Iteration.(Stop when converged)
+a,b=Lanczos_ground_state(temp,H1,i)#A returns ground energy,b returns ket.
+print(a,b)
+pointnum=200#Size of picture is pnum*pnum
+x=np.linspace(-2,6,pointnum)#Range for x
+s=np.zeros([pointnum,pointnum])
+k0=3.141592653589793
+k=np.linspace(0,k0,pointnum)#Range for k
+s1=set_of_ket(n,1,b)
+s2=set_of_ket(n,-1,b)
+#complete1,Htri1=Set_of_Lanczos(s1,H2,n,200)
+#complete2,Htri2=Set_of_Lanczos(s2,H3,n,200)
+for count in range(pointnum):
+    for count2 in range(pointnum):
+        print(count,count2)
+        z=x[count]+0.03j#0.03j just represents a small imaginary part.
+        G=Green_mtx_standard(z,n,s1,s2,H2,H3,a,b)#Lehmmann Rep for Green function
+        s[count][count2]=Periodization(G,n,k[count2])#Periodization
+
+plt.figure()
+plt.contourf(k,x,s,200)
+plt.colorbar()
+plt.show()
