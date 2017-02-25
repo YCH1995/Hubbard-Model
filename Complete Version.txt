@@ -300,8 +300,8 @@ def Green_mtx_Lanczos(z,n,U,ground_energy,ground_ket):
     a2=make_base(n,1)
     a3=make_base(n,-1)
     d=int(combination(n)*n/(n+1))
-    H2=make_matrix(a2,U,d,n)
-    H3=make_matrix(a3,U,d,n)
+    H2=make_matrix_near(a2,U,d,n)
+    H3=make_matrix_near(a3,U,d,n)
     for i in range(n):
         for j in range(n):
             left=[]
@@ -340,10 +340,13 @@ def Green_mtx_Lanczos_new(z,n,complete1,complete2,
     G=np.zeros((n,n),dtype=complex)
     for i in range(n):
         for j in range(n):
-            store=complete1[i]
+            f1=s1[i]
+            f2=s1[j]
+            store=complete1[j]
             H=Htri1[j]
             left=[]
-            for k in range(t):#######t not complied yet
+            t=H.shape[0]
+            for k in range(t):
                 left.append(np.vdot(f1,store[k]))
             temp=[z+ground_energy]*t
             H0=np.diag(temp,0)-H
@@ -352,14 +355,17 @@ def Green_mtx_Lanczos_new(z,n,complete1,complete2,
             x=np.linalg.inv(H0).dot(e)
             g=np.vdot(left,x)
             
-            store=complete2[j]
+            f1=s2[j]
+            f2=s2[i]
+            store=complete2[i]
             H=Htri2[i]
             left=[]
+            t=H.shape[0]
             for k in range(t):
                 left.append(np.vdot(f1,store[k]))
             temp=[z-ground_energy]*t
             H0=np.diag(temp,0)+H
-            e=[0]*time_d
+            e=[0]*t
             e[0]=1
             x=np.linalg.inv(H0).dot(e)
             g=g+np.vdot(left,x)
@@ -383,22 +389,66 @@ def Periodization(G,n,k):
             GreenCPT=GreenCPT+complex(cos(t),sin(t))*GreenRPA[a][b]
     GreenCPT=GreenCPT/n
     return GreenCPT.imag*(-2)    
-  
-def Periodization_Lanczos(G,n,k):
-#Why this is wrong?
-    V=np.zeros((n,n),dtype=complex)
-    t = n * k
-    V[0][n-1]=complex(cos(t),(-1)*sin(t))
-    V[n-1][0]=complex(cos(t),sin(t))
-#    print(G)
-    GreenRPA=G+G.dot(V.dot(G))
-    GreenCPT=0
-    for a in range(n):
-        for b in range(n): 
-            t=(b-a)*k
-            GreenCPT=GreenCPT+complex(cos(t),sin(t))*GreenRPA[a][b]
-    GreenCPT=GreenCPT/n
-    return GreenCPT.imag*(-2)
+ 
+def test(n):
+    i=0
+    j=1
+    left=[]
+    f1=H_tra(n,1,2*i).dot(b)
+    f2=H_tra(n,1,2*j).dot(b)
+    s,H,time=Lanczos_store(f2,H2,250)
+    for k in range(time):
+        left.append(np.vdot(f1,s[k]))
+    temp=[z+a]*time
+    H0=np.diag(temp,0)-H
+    e=[0]*(time)
+    e[0]=1
+    x=np.linalg.inv(H0).dot(e)
+    g=np.vdot(left,x)
+    left=[]
+    f1=H_tra(n,-1,2*j).dot(b)
+    f2=H_tra(n,-1,2*i).dot(b)
+#            f1=normal(f1)
+#            f2=normal(f2)
+    s,H,time=Lanczos_store(f2,H3,250)
+    for k in range(time):
+        left.append(np.vdot(f1,s[k]))
+    temp=[z-a]*time
+    H0=np.diag(temp,0)+H
+    e=[0]*time
+    e[0]=1
+    x=np.linalg.inv(H0).dot(e)
+    g=g+np.vdot(left,x)
+    print(g)
+    f1=s1[i]
+    f2=s1[j]
+    store=complete1[j]
+    H=Htri1[j]
+    left=[]
+    t=H.shape[0]
+    for k in range(t):
+        left.append(np.vdot(f1,store[k]))
+    temp=[z+a]*t
+    H0=np.diag(temp,0)-H
+    e=[0]*(t)
+    e[0]=1
+    x=np.linalg.inv(H0).dot(e)
+    g=np.vdot(left,x)
+    f1=s2[j]
+    f2=s2[i]
+    store=complete2[i]
+    H=Htri2[i]
+    left=[]
+    t=H.shape[0]
+    for k in range(t):
+        left.append(np.vdot(f1,store[k]))
+    temp=[z-a]*t
+    H0=np.diag(temp,0)+H
+    e=[0]*t
+    e[0]=1
+    x=np.linalg.inv(H0).dot(e)
+    g=g+np.vdot(left,x)
+    print(g)
     
 n=4#Number of electrons
 U=4#U/t,the relavent strength of interaction
@@ -413,23 +463,27 @@ H3=make_matrix_near(a3,U,dim2,n).toarray()
 temp=np.random.random(dim)#Random array
 i=Lanczos_time(temp,H1,1E-8)#Use Lanczos Iteration.(Stop when converged)
 a,b=Lanczos_ground_state(temp,H1,i)#A returns ground energy,b returns ket.
-print(a,b)
-pointnum=200#Size of picture is pnum*pnum
+#print(a,b)
+s1=set_of_ket(n,1,b)
+s2=set_of_ket(n,-1,b)
+complete1,Htri1=Set_of_Lanczos(s1,H2,n,200)
+complete2,Htri2=Set_of_Lanczos(s2,H3,n,200)
+
+pointnum=50#Size of picture is pnum*pnum
 x=np.linspace(-2,6,pointnum)#Range for x
 s=np.zeros([pointnum,pointnum])
 k0=3.141592653589793
 k=np.linspace(0,k0,pointnum)#Range for k
-s1=set_of_ket(n,1,b)
-s2=set_of_ket(n,-1,b)
-#complete1,Htri1=Set_of_Lanczos(s1,H2,n,200)
-#complete2,Htri2=Set_of_Lanczos(s2,H3,n,200)
 for count in range(pointnum):
     for count2 in range(pointnum):
         print(count,count2)
         z=x[count]+0.03j#0.03j just represents a small imaginary part.
-        G=Green_mtx_standard(z,n,s1,s2,H2,H3,a,b)#Lehmmann Rep for Green function
+        G=Green_mtx_standard(z,n,s1,s2,H2,H3,a,b)
+#Lehmmann Rep for Green function
+#        G=Green_mtx_Lanczos(z,n,U,a,b)
+#        G=Green_mtx_Lanczos_new(z,n,complete1,complete2,Htri1,Htri2,a,b)
         s[count][count2]=Periodization(G,n,k[count2])#Periodization
-
+        
 plt.figure()
 plt.contourf(k,x,s,200)
 plt.colorbar()
